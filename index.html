@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>Universal Trading Bot</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#edf2f7;background:#0b1220}
+*{box-sizing:border-box}body{margin:0}header{padding:22px 16px;background:#111c2e;border-bottom:1px solid #27364d}
+.wrap{max-width:1050px;margin:auto;padding:16px}h1{margin:0;font-size:1.45rem}header p{margin:6px 0 0;color:#a8b8cc;font-size:.92rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:14px 0}
+.card{background:#121d30;border:1px solid #293952;border-radius:14px;padding:16px;min-width:0}
+.label{font-size:.82rem;color:#a8b8cc}.value{font-size:1.3rem;font-weight:700;margin-top:8px;overflow-wrap:anywhere}
+button,select{font:inherit;color:#edf2f7;background:#1c2c45;border:1px solid #3b506e;border-radius:9px;padding:10px 12px}
+button{cursor:pointer}button:active{transform:scale(.99)}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.small{font-size:.85rem;color:#b8c6d8;line-height:1.5}.warn{border-left:4px solid #eab308;background:#302a18;padding:12px;border-radius:8px;color:#f9e7a3}
+table{width:100%;border-collapse:collapse;font-size:.88rem}td,th{text-align:left;padding:9px 6px;border-bottom:1px solid #293952;overflow-wrap:anywhere}th{color:#a8b8cc}
+.digits{display:grid;grid-template-columns:repeat(10,1fr);gap:5px;margin-top:12px}.digit{padding:8px 0;text-align:center;background:#1b2a40;border-radius:7px;font-weight:700}.muted{color:#91a3ba}
+@media(max-width:520px){.wrap{padding:10px}.digits{gap:3px}.digit{font-size:.8rem;padding:7px 0}}
+</style>
+</head>
+<body>
+<header><div class="wrap"><h1>Universal Trading Bot</h1><p>Separate project · Deriv digit research · MT5 XAUUSD integration planned</p></div></header>
+<main class="wrap">
+<div class="warn"><strong>Safety mode:</strong> This starter is signal/statistics only. It does not place live trades. Historical digit frequency does not reliably predict the next tick. Test in demo before considering real funds.</div>
+<div class="grid">
+  <section class="card"><div class="label">Deriv connection</div><div id="connection" class="value">Loading…</div><div class="small" id="connectionHint">Waiting for server status</div></section>
+  <section class="card"><div class="label">Selected market</div><div class="row" style="margin-top:8px"><select id="market"><option>R_10</option><option>R_25</option><option>R_50</option><option>R_75</option><option>R_100</option><option>1HZ10V</option><option>1HZ25V</option><option>1HZ50V</option><option>1HZ75V</option><option>1HZ100V</option></select><button id="setMarket">Connect</button></div><div class="small">Market availability may vary by account and API.</div></section>
+  <section class="card"><div class="label">Latest tick</div><div id="quote" class="value">—</div><div class="small" id="tickMeta">No tick received yet</div></section>
+  <section class="card"><div class="label">MT5 / XAUUSD</div><div id="mt5" class="value">Not connected</div><div class="small">Requires a separately configured MT5 bridge/Expert Advisor.</div></section>
+</div>
+<section class="card">
+<h2 style="margin-top:0">Last-digit counts</h2><div class="small">Based on the most recent received ticks. This is descriptive data, not a reliable next-digit forecast.</div>
+<div id="digits" class="digits"></div>
+<div class="row" style="margin-top:12px"><button id="signalsMode">Use signals-only mode</button><span id="modeStatus" class="small">Signals-only mode</span></div>
+</section>
+<section class="card" style="margin-top:14px">
+<h2 style="margin-top:0">Analysis log</h2><div class="small">Signals are research notes only. No trades are executed.</div>
+<div style="overflow-x:auto"><table><thead><tr><th>Time</th><th>Market</th><th>Note</th></tr></thead><tbody id="signals"><tr><td colspan="3" class="muted">Waiting for tick data…</td></tr></tbody></table></div>
+</section>
+<section class="card" style="margin-top:14px">
+<h2 style="margin-top:0">XAUUSD integration status</h2>
+<p class="small">The website can host gold analysis and control a separately running MT5 Expert Advisor. The MT5 bridge and gold strategy still need to be installed and tested on a Windows MT5 terminal or compatible VPS. This starter does not send gold orders.</p>
+</section>
+<p class="small muted">Never enter your Deriv API token in this page. Configure credentials only as private environment variables on the backend host.</p>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+async function getState(){
+ try{
+  const r=await fetch('/api/state'); const s=await r.json();
+  $('connection').textContent=s.connection;
+  $('connectionHint').textContent=s.connection==='needs_app_id'?'Set DERIV_APP_ID in your private host settings.':'Backend market-data connection status';
+  $('quote').textContent=s.lastTick ? s.lastTick.quote : '—';
+  $('tickMeta').textContent=s.lastTick ? `${s.lastTick.symbol} · last digit ${s.lastTick.lastDigit} · ${new Date(s.lastTick.epoch*1000).toLocaleTimeString()}`:'No tick received yet';
+  $('market').value=s.market;
+  $('mt5').textContent=s.mt5.connected?'Connected':'Not connected';
+  $('modeStatus').textContent='Mode: '+s.mode;
+  const counts=s.lastDigitCounts||{};
+  $('digits').innerHTML=Array.from({length:10},(_,i)=>`<div class="digit">${i}<br><span class="muted">${counts[i]||0}</span></div>`).join('');
+  $('signals').innerHTML=(s.signals||[]).slice(0,20).map(x=>`<tr><td>${new Date(x.timestamp).toLocaleTimeString()}</td><td>${x.market}</td><td>${x.detail}</td></tr>`).join('')||'<tr><td colspan="3" class="muted">Waiting for tick data…</td></tr>';
+ }catch(e){$('connection').textContent='Server unavailable';}
+}
+$('setMarket').onclick=async()=>{const symbol=$('market').value;const r=await fetch('/api/market',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbol})});const j=await r.json();if(!r.ok)alert(j.error||'Could not change market');getState();};
+$('signalsMode').onclick=async()=>{const r=await fetch('/api/mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'signals'})});const j=await r.json();$('modeStatus').textContent=j.mode?'Mode: '+j.mode:j.error;};
+getState();setInterval(getState,2000);
+</script>
+</body></html>
